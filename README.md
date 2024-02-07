@@ -11,22 +11,22 @@
 
 #TODO if there are overlapping repeat sequences it cant tell the the right order, so it should only do this per contig found, then pick the one with the highest bitscore
 
-inputdir="/path/to/insilico_mlva/example/input_fasta"
-outputdir="/path/to/insilico_mlva/example"
-
 ### Example usage ###
 ### Activate your blastn environment and tools required for filter script ###
+
+inputdir="/path/to/insilico_mlva/example/input_fasta"
+outputdir="/path/to/insilico_mlva/example"
 
 conda activate blast4mash
 python /mnt/scratch_dir/landmanf/gitlabrivm/insilico_mlva/bin/blast_mrsa_mlva.py -i ${inputdir} -o ${outputdir}/output_blastn/
 
 ### wait for jobs ###
 
-for file in ${inputdir}/*
-do
-base=$(basename "$file")
-base_no_ext="${base%.fasta}"
-primerfile="${outputdir}/${base_no_ext}_primers-blastn.csv"
-repeatfile="${outputdir}/${base_no_ext}_repeat-blastn.csv"
-python /path/to/insilico_mlva/bin/filter_mlva_blast.py -bp ${primerfile} -br ${repeatfile} -o  ${outputdir}/output_mlva_typing/
-done
+for file in ${inputdir}/*<br>
+do<br>
+base=$(basename "$file")<br>
+base_no_ext="${base%.fasta}"<br>
+primerfile="${outputdir}/${base_no_ext}_primers-blastn.csv"<br>
+repeatfile="${outputdir}/${base_no_ext}_repeat-blastn.csv"<br>
+python /path/to/insilico_mlva/bin/filter_mlva_blast.py -bp ${primerfile} -br ${repeatfile} -o  ${outputdir}/output_mlva_typing/<br>
+done<br>
