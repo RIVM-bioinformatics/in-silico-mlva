@@ -4,25 +4,6 @@ import numpy as np
 from pathlib import Path
 from termcolor import colored
 
-### This script will in-silico determine the MLVA for MRSA isolates based on a long-read only assembly.
-### It does so by blasting for all the primers and then determine if a product could have been formed that is <1200 bp.
-### For VNTR63_01 however the reverse primer was not found for 35% of tested isolates. So the approach here is to look for the repeat sequences that are within range of the forward primer
-### This makes it a different approach because the product size is not taken into account here as should be the case. 
-###  to add both flanking regions + repeat sizes + primers sizes. But how to determine the flank region near the reverse primer? Can check in BN or other sequences if it's conserved.
-
-#TODO It still crashes if it cant find the forward VNTR63 primer (local variable 'forward_pos1' referenced before assignment), in get_number_repeats
-
-#TODO Check if the sizes found are at locations within range of their repeat sequences. Currently only done for VNTR63_01
-
-#TODO if there are overlapping repeat sequences it cant tell the the right order, so it should only do this per contig found, then pick the one with the highest bitscore
-
-# python /path/to/insilico_mlva/bin/filter_mlva_blast.py --blast_primer example/output_blastn/pubkey123_primers-blastn.csv --blast_repeat example/output_blastn/pubkey123_sequences-blastn.csv --output example/output_mlva_typing/
-
-# logo = f""" _             _  _  _            __  __  _  __   __ _   
-#         (_) _ _    ___(_)| |(_) __  ___  |  \/  || | \ \ / //_\  
-#         | || ' \  (_-<| || || |/ _|/ _ \ | |\/| || |__\ V // _ \ 
-#         |_||_||_| /__/|_||_||_|\__|\___/ |_|  |_||____|\_//_/ \_\ 
-#         """
 def getmylogo(pth):
     exec_globals = {}
     with open(pth, 'r') as lfile:
