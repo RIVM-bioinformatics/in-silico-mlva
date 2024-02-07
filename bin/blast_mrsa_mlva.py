@@ -1,11 +1,61 @@
-import argparse
-import os
-import glob
-import subprocess 
+import argparse, os, glob, subprocess, textwrap
 from pathlib import Path
+from termcolor import colored
 
-# Example usage
-# python /path/to/insilico_mlva/bin/blast_mrsa_mlva.py --input example/input_fasta/ --output example/output_blastn/ --perc_identity 50
+def getmylogo(pth):
+    exec_globals = {}
+    with open(pth, 'r') as lfile:
+        exec(lfile.read(), exec_globals)
+    logo = exec_globals.get('logo', None)
+    return logo
+
+def parse_arguments(logo):
+    arg = argparse.ArgumentParser(formatter_class=argparse.RawDescriptionHelpFormatter,
+    description=textwrap.dedent(f"""
+        {colored(logo, 'red', attrs=["bold"])}
+        {colored('In silico MLVA typing for MRSA:', 'white', attrs=["bold", "underline"])}
+
+        Blasts for all primers and repeat sequences.
+        Only the repeat sequence of VNTR63_01 is used in downstream analysis.
+-----------------------------------------------------------------------------------
+        {colored('Example usage:', 'green', attrs=["bold", "underline"])}
+            python {os.path.abspath(__file__)} 
+            --input example/input_fasta/
+            --output example/output_blastn/)
+-----------------------------------------------------------------------------------
+        """))
+    arg.add_argument("-i", 
+                    "--input", 
+                    metavar="Path", 
+                    help="Input directory with assembled fasta file", 
+                    type=str, 
+                    required=True)
+    arg.add_argument("-o", 
+                    "--output", 
+                    metavar="Path", 
+                    help="Output directory where you want to copy to", 
+                    type=str, 
+                    required=False)
+    arg.add_argument("-pi", 
+                    "--perc_identity",
+                    metavar="INT", 
+                    help="Percentage of identity to use to search for in the primers", 
+                    type=parse_percentage, 
+                    default=50, 
+                    required=False)
+
+    return arg.parse_args()
+
+def determine_outdir(flg_out):
+    if flg_out == None:
+        outdir = os.path.abspath('') + '/output_blastn'
+        Path(os.path.abspath(f"{outdir}")).mkdir(parents=True, exist_ok=True)
+        print(f"Output directory: {outdir}")
+    else:
+        Path(os.path.abspath(flg_out)).mkdir(parents=True, exist_ok=True)
+        outdir = os.path.abspath(flg_out)
+        print(f"Output directory: {outdir}")
+    return outdir
 
 def parse_percentage(value):
     value = int(value)
@@ -15,46 +65,19 @@ def parse_percentage(value):
         raise argparse.ArgumentTypeError("Percentage must be in the range 0-100")
 
 def main():
-    arg = argparse.ArgumentParser(description="Blast MRSA MLVA")
-    arg.add_argument("-i", 
-                    "--input", 
-                    metavar="Name", 
-                    help="Input directory with assembled fasta file", 
-                    type=str, 
-                    required=True)
-    arg.add_argument("-o", 
-                    "--output", 
-                    metavar="Name", 
-                    help="Output directory where you want to copy to", 
-                    type=str, 
-                    required=False)
-    arg.add_argument("-pi", 
-                    "--perc_identity",
-                    help="Percentage of identity to use to search for in the primers", 
-                    type=parse_percentage, 
-                    default=50, 
-                    required=False)
-    flags = arg.parse_args()
-
-    if not flags.output:
-        print("No output directory provided; using current directory + '/output' instead.")
-        out = os.path.abspath('') + '/output_blastn'
-    else:
-        print("Output directory provided.")
-        out = os.path.abspath(flags.output)
-
-    Path(out).mkdir(parents=True, exist_ok=True)
-
     current_file_path = os.path.abspath(__file__)
     parent_dir_path = os.path.dirname(os.path.dirname(current_file_path))
     primer_file = os.path.join(parent_dir_path, "files", "mrsa_mlva_primers.fasta")
     sequence_file = os.path.join(parent_dir_path, "files", "mrsa_mlva_sequenties.fasta")
+    logo_path = os.path.join(parent_dir_path, "files", "logo.txt")
+    flags = parse_arguments(getmylogo(logo_path))
+    outdir = determine_outdir(flags.output)
 
     list_of_files = glob.glob(os.path.abspath(f"{flags.input}/*"))
 
     for key in list_of_files:
         basename = os.path.splitext(os.path.basename(key))[0]
-        outputname = f"{out}/{basename}"
+        outputname = f"{outdir}/{basename}"
         ### blast for primers:
         subprocess_cmd_primer_blast2input = f"bsub -q bio -n 1 -R 'rusage[mem=12G]' -R 'span[hosts=1]' -W 15 -M 16000 \
             \"blastn -query {key} \

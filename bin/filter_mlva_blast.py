@@ -1,13 +1,14 @@
-import argparse, os.path, glob, shutil, subprocess, pymssql, traceback, csv
+import argparse, os.path, csv, textwrap
 import pandas as pd
 import numpy as np
 from pathlib import Path
+from termcolor import colored
 
 ### This script will in-silico determine the MLVA for MRSA isolates based on a long-read only assembly.
 ### It does so by blasting for all the primers and then determine if a product could have been formed that is <1200 bp.
-### For VNTR63_01 however the reverse primer was not found for 35% of all isolates. So the approach here is to look for the repeat sequences that are within range of the forward primer
+### For VNTR63_01 however the reverse primer was not found for 35% of tested isolates. So the approach here is to look for the repeat sequences that are within range of the forward primer
 ### This makes it a different approach because the product size is not taken into account here as should be the case. 
-### If you want to fix this you Would have to add both flanking regions + repeat sizes + primers sizes. But how to determine the flank region near the reverse primer? Can check in BN or other sequences if it's conserved.
+###  to add both flanking regions + repeat sizes + primers sizes. But how to determine the flank region near the reverse primer? Can check in BN or other sequences if it's conserved.
 
 #TODO It still crashes if it cant find the forward VNTR63 primer (local variable 'forward_pos1' referenced before assignment), in get_number_repeats
 
@@ -17,14 +18,39 @@ from pathlib import Path
 
 # python /path/to/insilico_mlva/bin/filter_mlva_blast.py --blast_primer example/output_blastn/pubkey123_primers-blastn.csv --blast_repeat example/output_blastn/pubkey123_sequences-blastn.csv --output example/output_mlva_typing/
 
-def parse_arguments():
-    arg = argparse.ArgumentParser()
+# logo = f""" _             _  _  _            __  __  _  __   __ _   
+#         (_) _ _    ___(_)| |(_) __  ___  |  \/  || | \ \ / //_\  
+#         | || ' \  (_-<| || || |/ _|/ _ \ | |\/| || |__\ V // _ \ 
+#         |_||_||_| /__/|_||_||_|\__|\___/ |_|  |_||____|\_//_/ \_\ 
+#         """
+def getmylogo(pth):
+    exec_globals = {}
+    with open(pth, 'r') as lfile:
+        exec(lfile.read(), exec_globals)
+    logo = exec_globals.get('logo', None)
+    return logo
 
+def parse_arguments(logo):
+    arg = argparse.ArgumentParser(formatter_class=argparse.RawDescriptionHelpFormatter,
+    description=textwrap.dedent(f"""
+        {colored(logo, 'red', attrs=["bold"])}
+        {colored('In silico MLVA typing for MRSA:', 'white', attrs=["bold", "underline"])}
+
+        Searches possible products formed based on the primer blast output.
+        Script will then determine if these are within a known bin size for each VNTR.
+-----------------------------------------------------------------------------------
+        {colored('Example usage:', 'green', attrs=["bold", "underline"])}
+            python {os.path.abspath(__file__)} 
+            --blast_primer example/output_blastn/RIVM_M096462_primers-blastn.csv
+            --blast_repeat example/output_blastn/RIVM_M096462_repeat-blastn.csv 
+            --output example/output_mlva_typing/)
+-----------------------------------------------------------------------------------
+        """))
     arg.add_argument(
         "-bp",
         "--blast_primer",
         metavar="Name",
-        help="Csv file with blast output",
+        help="CSV file with primer blastn output",
         type=str,
         required=True,
     )
@@ -33,7 +59,7 @@ def parse_arguments():
         "-br",
         "--blast_repeat",
         metavar="Name",
-        help="Csv file with blast repeat sequence output (could be in the same blast possibly)",
+        help="CSV file with blastn repeat sequence output",
         type=str,
         required=True,
     )
@@ -112,14 +138,21 @@ def get_number_repeats(dataframe, dataframe_repeat, fname, rname, bitscori, bits
                 print(f"Not even forward primer found for {fname}, can't continue")
                 exit()
             else:
+                forward_pos1, forward_pos2 = [], []
                 for l in forward_list:
-                    forward_pos1 = dataframe.loc[(dataframe['qseqid'] == l) & (dataframe['sseqid'] == fname)]['qend'].tolist()
-                    forward_pos2 = dataframe.loc[(dataframe['qseqid'] == l) & (dataframe['sseqid'] == fname)]['qstart'].tolist()
+                    forward_pos1_pre = dataframe.loc[(dataframe['qseqid'] == l) & (dataframe['sseqid'] == fname)]['qend'].tolist()
+                    forward_pos2_pre = dataframe.loc[(dataframe['qseqid'] == l) & (dataframe['sseqid'] == fname)]['qstart'].tolist()
+                    forward_pos1.extend(forward_pos1_pre)
+                    forward_pos2.extend(forward_pos2_pre)
     else:
+        forward_pos1, forward_pos2 = [], []
         for l in shared_list: # for every contig
-            forward_pos1 = dataframe.loc[(dataframe['qseqid'] == l) & (dataframe['sseqid'] == fname)]['qend'].tolist()
-            forward_pos2 = dataframe.loc[(dataframe['qseqid'] == l) & (dataframe['sseqid'] == fname)]['qstart'].tolist()
+            forward_pos1_pre = dataframe.loc[(dataframe['qseqid'] == l) & (dataframe['sseqid'] == fname)]['qend'].tolist()
+            forward_pos1.extend(forward_pos1_pre)
+            forward_pos2_pre = dataframe.loc[(dataframe['qseqid'] == l) & (dataframe['sseqid'] == fname)]['qstart'].tolist()
+            forward_pos2.extend(forward_pos2_pre)
     repeat_pos_list = []
+
     for l in repeat_list:
         repeat_pos = dataframe_repeat.loc[(dataframe_repeat['qseqid'] == l) & (dataframe_repeat['sseqid'] == 'VNTR63_01')].apply(lambda row: f"{row['qstart']}-{row['qend']}", axis=1).tolist()
         repeat_pos_list.extend(repeat_pos)
@@ -293,8 +326,8 @@ def double_pad(profile_lst):
     return double_padded_lst_fc
 
 def write_to_file(profile_lst, df_mappings, mecpvl_list, mlvadict, fname, outd):
-    base_input_fc = os.path.basename(fname).replace('.csv','')
-    with open(f"{outd}/{base_input_fc}.txt", "w") as my_file:
+    base_input_fc = os.path.basename(fname).replace('_primers-blastn.csv','')
+    with open(f"{outd}/{base_input_fc}_MLVA.txt", "w") as my_file:
         my_file.write(str(profile_lst) + '\n')
         for p in profile_lst:
             output_mecpvl = mec_or_pvl(df_mappings,mecpvl_list,mlvadict)
@@ -303,17 +336,14 @@ def write_to_file(profile_lst, df_mappings, mecpvl_list, mlvadict, fname, outd):
             my_file.write(output_mecpvl['MLVA_PVL'] + '\n')
 
 def main():
-    flags = parse_arguments()
-
     current_file_path = os.path.abspath(__file__)
     parent_dir_path = os.path.dirname(os.path.dirname(current_file_path))
     mrsa_mapping = os.path.join(parent_dir_path, "files", "mrsa_mappings.csv")
+    logo_path = os.path.join(parent_dir_path, "files", "logo.txt")
     df_mapping = pd.read_csv(mrsa_mapping, sep=",")
 
+    flags = parse_arguments(getmylogo(logo_path))
     outdir = determine_outdir(flags.output)
-    current_file_path = os.path.abspath(__file__)
-    parent_dir_path = os.path.dirname(os.path.dirname(current_file_path))
-    mrsa_mapping = os.path.join(parent_dir_path, "files", "mrsa_mappings.csv")
 
     blastn_header = ['qseqid','sseqid','pident','length','mismatch','gapopen','qstart','qend','sstart','send','evalue','bitscore']
     static_list = ['MLVA_MecA', 'MLVA_PVL']
