@@ -14,10 +14,10 @@
 ### Example usage ###
 ### Activate your blastn environment and tools required for filter script ###
 
-inputdir="/path/to/insilico_mlva/example/input_fasta"
+inputdir="/path/to/insilico_mlva/example/input_fasta"<br>
 outputdir="/path/to/insilico_mlva/example"
 
-conda activate blast4mash
+conda activate yourblastn_env<br>
 python /mnt/scratch_dir/landmanf/gitlabrivm/insilico_mlva/bin/blast_mrsa_mlva.py -i ${inputdir} -o ${outputdir}/output_blastn/
 
 ### wait for jobs ###
