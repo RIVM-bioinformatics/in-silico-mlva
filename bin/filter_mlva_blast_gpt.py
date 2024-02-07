@@ -1,0 +1,352 @@
+import argparse
+import os.path
+import csv
+import pandas as pd
+from pathlib import Path
+
+def parse_arguments():
+    arg = argparse.ArgumentParser()
+
+    arg.add_argument(
+        "-bp",
+        "--blast_primer",
+        metavar="Name",
+        help="Csv file with blast output",
+        type=str,
+        required=True,
+    )
+
+    arg.add_argument(
+        "-br",
+        "--blast_repeat",
+        metavar="Name",
+        help="Csv file with blast repeat sequence output (could be in the same blast possibly)",
+        type=str,
+        required=True,
+    )
+
+    arg.add_argument(
+        "-o",
+        "--output",
+        metavar="Name",
+        help="Output directory where you want to copy to",
+        type=str,
+        required=False,
+    )
+
+    return arg.parse_args()
+
+def write_to_file(profile_lst, df_mappings, mecpvl_list, mlvadict, fname, outdir):
+    base_input_fc = os.path.basename(fname).replace('.csv','')
+    with open(f"{outdir}/{base_input_fc}.txt", "w") as my_file:
+        my_file.write(str(profile_lst) + '\n')
+        for p in profile_lst:
+            output_mecpvl = mec_or_pvl(df_mappings,mecpvl_list,mlvadict)
+            my_file.write(f"MLVA profile: {p}" + '\n')
+            my_file.write(output_mecpvl['MLVA_MecA'] + '\n')
+            my_file.write(output_mecpvl['MLVA_PVL'] + '\n')
+
+def csv_to_list(file):
+    with open(file) as f:
+        if os.path.getsize(file) > 0:
+            reader = csv.reader(f)
+            data = list(reader)
+            return data
+
+def mec_or_pvl(df_mappings, mecpvl_list, mlvadict):
+    mp_dict_fc = {}
+    for mp in mecpvl_list:
+        values = mlvadict[mp]
+        if len(values) == 0:
+            if mp == 'MLVA_MecA':
+                mp_dict_fc[mp] = "MecA MecC Negatief"
+            elif mp == 'MLVA_PVL':
+                mp_dict_fc[mp] = "PVL Negatief"
+        elif len(set(values)) == 1:
+            try:
+                value = df_mappings.loc[(df_mappings['VNTR'] == mp) & (df_mappings['Start'] <= values[0]) & (df_mappings['Stop'] >= values[0])].Value.item()
+                if mp == 'MLVA_MecA':
+                    if value == 1:
+                        mp_dict_fc[mp] = "MecA positief"
+                    elif value == 2:
+                        mp_dict_fc[mp] = "MecC positief"
+                elif mp == 'MLVA_PVL':
+                    if value == 1:
+                        mp_dict_fc[mp] = "PVL positief"
+            except:
+                mp_dict_fc[mp] = "Something failed"
+    return mp_dict_fc
+
+def determine_repeats_inrange(for1, for2, repeats): # This returns 99 if no primers are found
+    repeat_sequence_in_range_fc = []
+    for f in for1:
+        for seq in repeats:
+            if int(f)-int(seq.split('-')[0]) > 0 and int(f)-int(seq.split('-')[0]) <= 1200:
+                repeat_sequence_in_range_fc.append(seq)
+    for f in for2:
+        for seq in repeats:
+            if int(f)-int(seq.split('-')[0]) <= 0 and int(f)-int(seq.split('-')[0]) >= -1200:
+                repeat_sequence_in_range_fc.append(seq)
+    return repeat_sequence_in_range_fc
+
+def determine_chain(repeats):
+    sorted_range_list = sorted(repeats, key=lambda x: int(x.split('-')[0])) # Sort all of the ranges with the lowest value to highest starting value
+    if len(sorted_range_list) > 0:
+        repeat_counter = 1
+        for i in range(len(sorted_range_list) - 1):
+            current_element = sorted_range_list[i]
+            next_element = sorted_range_list[i + 1]
+            current_end = int(current_element.split('-')[1])
+            next_start = int(next_element.split('-')[0])
+            if current_end < next_start: #This is where you keep counting if the end matches the next start.
+                if int(current_element.split('-')[1]) + 1 == int(next_element.split('-')[0]):
+                    repeat_counter += 1
+        return str(repeat_counter)
+    else:
+        return '99'
+
+def get_number_repeats(dataframe, dataframe_repeat, fname, rname, bitscori, bitscori_r):
+    dataframe = dataframe.astype({'bitscore':'float'})
+    dataframe = dataframe.loc[dataframe['bitscore'] >= bitscori]
+    dataframe_repeat = dataframe_repeat.astype({'bitscore':'float'})
+    dataframe_repeat = dataframe_repeat.loc[dataframe_repeat['bitscore'] >= bitscori_r]
+    forward_list = list(set(dataframe.loc[dataframe['sseqid'] == fname]['qseqid'].tolist()))
+    shared_list = list(set(dataframe.loc[(dataframe['sseqid'] == rname) & (dataframe['qseqid'].isin(forward_list))]['qseqid'].tolist())) # contigs which have results for both forward and reverse
+    repeat_list = list(set(dataframe_repeat.loc[dataframe_repeat['sseqid'] == 'VNTR63_01']['qseqid'].tolist()))
+    if len(shared_list) == 0: # This likely means that 1 of the primers wasn't found! Which is expected for 63_01 reverse
+        if fname != 'VNTR63_01_Ff':
+            print(f"Only 1 primer found for {fname}, can't continue")
+            exit()
+        else:
+            if len(forward_list) == 0:
+                print(f"Not even forward primer found for {fname}, can't continue: {flags.blast_repeat}")
+                exit()
+            else:
+                for l in forward_list:
+                    forward_pos1 = dataframe.loc[(dataframe['qseqid'] == l) & (dataframe['sseqid'] == fname)]['qend'].tolist()
+                    forward_pos2 = dataframe.loc[(dataframe['qseqid'] == l) & (dataframe['sseqid'] == fname)]['qstart'].tolist()
+    else:
+        for l in shared_list: # for every contig
+            forward_pos1 = dataframe.loc[(dataframe['qseqid'] == l) & (dataframe['sseqid'] == fname)]['qend'].tolist()
+            forward_pos2 = dataframe.loc[(dataframe['qseqid'] == l) & (dataframe['sseqid'] == fname)]['qstart'].tolist()
+    repeat_pos_list = []
+    for l in repeat_list:
+        repeat_pos = dataframe_repeat.loc[(dataframe_repeat['qseqid'] == l) & (dataframe_repeat['sseqid'] == 'VNTR63_01')].apply(lambda row: f"{row['qstart']}-{row['qend']}", axis=1).tolist()
+        repeat_pos_list.extend(repeat_pos)
+    repeat_sequence_in_range = determine_repeats_inrange(forward_pos1, forward_pos2, repeat_pos_list) # Only these make sense because they are in range with the forward primer
+    number_of_repeats = determine_chain(repeat_sequence_in_range)
+    return number_of_repeats
+
+def get_my_profile(df_mappings, vntr_lst, mlvadict):
+    profile_fc = "" 
+    profile_fc_list = []
+    deviated = False
+    for v in vntr_lst:
+        profile_fc = profile_fc.strip('-') # should just not add a '-' on the first value but this works too
+        if v == 'VNTR63_01': # Making an exception for VNTR63_01 because the reverse primer can't be found. It's a big else 
+            repeat_found = get_number_repeats(df,df2,'VNTR63_01_Ff','VNTR63_01_r',30,55)
+            profile_fc = f"{profile_fc}-{repeat_found}"
+        else:
+            values = mlvadict[v] # These values should be checked if they are within range of their primers!
+            if deviated == False:
+                if len(values) == 0:
+                    profile_fc = f"{profile_fc}-99"
+                elif len(values) == 1:
+                    try: # vntr_no = df_mappings.loc[(df_mappings['VNTR'] == v) & (df_mappings['Start'] <= values[0]) & (df_mappings['Stop'] >= values[0])].Value.item()
+                        matching_ranges = df_mappings.loc[
+                        (df_mappings['VNTR'] == v) & 
+                        (df_mappings['Start'] <= values[0]) & 
+                        (df_mappings['Stop'] >= values[0])]
+                        if not matching_ranges.empty:
+                            vntr_no = matching_ranges['Value'].item()
+                        else: # If the found size is outside a range it takes the closest value, perhaps should print a message for an isolate when this has happened.
+                            closest_value_index = np.argmin(
+                            np.abs(df_mappings.loc[df_mappings['VNTR'] == v, 'Start'].values - values[0]) +
+                            np.abs(df_mappings.loc[df_mappings['VNTR'] == v, 'Stop'].values - values[0]))
+                            vntr_no = df_mappings.loc[df_mappings['VNTR'] == v, 'Value'].iloc[closest_value_index]
+                        profile_fc = f"{profile_fc}-{vntr_no}"
+                    except:
+                        profile_fc = f"{profile_fc}-99"
+                else: # This means multiple locations have been found, however they might be in the same bin so this checks if that's the case or not.
+                    bin_list = []
+                    for index, val in enumerate(values):
+                        try:
+                            vntr_no = df_mappings.loc[(df_mappings['VNTR'] == v) & (df_mappings['Start'] <= val) & (df_mappings['Stop'] >= val)].Value.item()
+                            bin_list.append(vntr_no)
+                        except:
+                            bin_list.append('99')
+                        if index == len(values) - 1:
+                            if len(list(set(bin_list))) != 1:
+                                deviated = True
+                            else:
+                                profile_fc = f"{profile_fc}-{bin_list[0]}"
+                    if deviated == True:
+                        possibles = []
+                        for n in values:
+                            try:
+                                vntr_no = df_mappings.loc[(df_mappings['VNTR'] == v) & (df_mappings['Start'] <= n) & (df_mappings['Stop'] >= n)].Value.item()
+                                possibles.append(vntr_no)
+                            except:
+                                possibles.append('99')
+                        for p in possibles:
+                            profile_fc_list.append(f"{profile_fc}-{p}")
+            else: # This happens if deviates = True and multiple profiles were found, can probably be excluded because 
+                deviated_fc = determine_deviated_profiles(profile_fc_list, values, df_mappings, v)
+    if len(profile_fc_list) == 0: # This is done to not add a profile when multiples were found but can probably remove because it shouldn't happen. Besides how would we determine which one would be correct
+        profile_fc_list.append(profile_fc)
+    profile_fc_list = double_pad(list(set(profile_fc_list)))
+    return profile_fc_list
+
+def get_mlva_dict(dataframe):
+    MLVA_dict_fc = {}
+    MLVA_dict_fc['MLVA_MecA'] = get_possible_sizes(dataframe,'MLVA_MecA_Ff','MLVA_MecA_r',30)
+    MLVA_dict_fc['VNTR09_01'] = get_possible_sizes(dataframe,'VNTR09_01_Ff','VNTR09_01_r',30)
+    MLVA_dict_fc['VNTR61_01'] = get_possible_sizes(dataframe,'VNTR61_01_Nf','VNTR61_01_r',30)
+    MLVA_dict_fc['VNTR61_02'] = get_possible_sizes(dataframe,'VNTR61_02_Vf','VNTR61_02_r',30)
+    MLVA_dict_fc['VNTR67_01'] = get_possible_sizes(dataframe,'VNTR67_01_Pf','VNTR67_01_r',30)
+    MLVA_dict_fc['MLVA_PVL'] = get_possible_sizes(dataframe,'MLVA_PVL_Ff','MLVA_PVL_r',30)
+    MLVA_dict_fc['VNTR21_01'] = get_possible_sizes(dataframe,'VNTR21_01_Vf','VNTR21_01_r',30)
+    MLVA_dict_fc['VNTR24_01'] = get_possible_sizes(dataframe,'VNTR24_01_Pf','VNTR24_01_r',30)
+    MLVA_dict_fc['VNTR63_01'] = get_possible_sizes(dataframe,'VNTR63_01_Ff','VNTR63_01_r',15)
+    MLVA_dict_fc['VNTR81_01'] = get_possible_sizes(dataframe,'VNTR81_01_Nf','VNTR81_01_r',30)
+    return MLVA_dict_fc
+
+def get_possible_sizes(dataframe, fname, rname, bitscori):
+    # TODO: Remove any possible sizes that are not within their found repeat locations.
+    forward_list = list(set(dataframe.loc[dataframe['sseqid'] == fname]['qseqid'].tolist()))
+    shared_list = list(set(dataframe.loc[(dataframe['sseqid'] == rname) & (dataframe['qseqid'].isin(forward_list))]['qseqid'].tolist())) # contigs which have results for both forward and reverse
+    all_posi_fc = []
+    dataframe = dataframe.astype({'bitscore':'float'})
+    dataframe = dataframe.loc[dataframe['bitscore'] >= bitscori]
+    for l in shared_list: # for every contig
+        forward_pos1 = dataframe.loc[(dataframe['qseqid'] == l) & (dataframe['sseqid'] == fname)]['qend'].tolist()
+        reverse_pos1 = dataframe.loc[(dataframe['qseqid'] == l) & (dataframe['sseqid'] == rname)]['qstart'].tolist()
+        forward_pos2 = dataframe.loc[(dataframe['qseqid'] == l) & (dataframe['sseqid'] == fname)]['qstart'].tolist()
+        reverse_pos2 = dataframe.loc[(dataframe['qseqid'] == l) & (dataframe['sseqid'] == rname)]['qend'].tolist()
+        for f in forward_pos1: # Because I don't know the orientation of the chromosome the forward might actually be at a higher location than the reverse. So by subtracting reverse from forward you should have a positive integer <1200 whenever this happens.
+            for r in reverse_pos1: # Taking the qend of forward en qstart of reverse means you calculate the total size of the product whenever the forward is located upstream compared to the reverse.
+                if int(f)-int(r) >= 0 and int(f)-int(r) <= 1200:
+                    all_posi_fc.append(int(f)-int(r))
+        for f in forward_pos2:
+            for r in reverse_pos2:
+                if int(f)-int(r) >= -1200 and int(f)-int(r) <= 0:
+                    all_posi_fc.append(0-(int(f)-int(r)))
+    return list(set(all_posi_fc))
+
+def determine_deviated_profiles(a_profile_list, val, dfmap, fcv):
+    times_to_pop = len(a_profile_list)
+    for pli in range(0,len(a_profile_list)):
+        pl = a_profile_list[pli]
+        if len(val) == 0:
+            pl = f"{pl}-99"
+            a_profile_list.append(pl)
+        elif len(val) == 1:
+            try:
+                vntr_no = dfmap.loc[(dfmap['VNTR'] == fcv) & (dfmap['Start'] <= val[0]) & (dfmap['Stop'] >= val[0])].Value.item()
+                pl = f"{pl}-{vntr_no}"
+                successful = True
+            except:
+                pl = f"{pl}-99"
+                successful = False
+                a_profile_list.append(pl)
+            if successful:
+                a_profile_list.append(pl)
+        else:
+            possibles = []
+            for n in val:
+                try:
+                    vntr_no = dfmap.loc[(dfmap['VNTR'] == fcv) & (dfmap['Start'] <= n) & (dfmap['Stop'] >= n)].Value.item()
+                    possibles.append(vntr_no)
+                except:
+                    possibles.append('99')
+            for p in possibles:
+                a_profile_list.append(f"{pl}-{p}")
+    for p in range(0,times_to_pop):
+        a_profile_list.pop(0)
+    return a_profile_list
+
+def double_pad(profile_lst):
+    double_padded_lst_fc = []
+    for l in profile_lst:
+        ls = l.split('-')
+        new_l_fc = f""
+        for n in ls:
+            if len(n) == 1:
+                new_l_fc = f"{new_l_fc}-0{n}".strip('-')
+            else:
+                new_l_fc = f"{new_l_fc}-{n}".strip('-')
+        double_padded_lst_fc.append(new_l_fc)
+    return double_padded_lst_fc
+
+def main():
+    flags = parse_arguments()
+
+    blast_output = flags.blast_primer
+    repeat_output = flags.blast_repeat
+    output_dir = flags.output
+    current_file_path = os.path.abspath(__file__)
+    parent_dir_path = os.path.dirname(os.path.dirname(current_file_path))
+    mrsa_mapping = os.path.join(parent_dir_path, "files", "mrsa_mappings.csv")
+    df_mapping = pd.read_csv(mrsa_mapping, sep=",")
+
+    df = pd.read_csv(blast_output, header=None, sep=",")
+    df2 = pd.read_csv(repeat_output, header=None, sep=",")
+
+    df.rename(
+        columns={
+            0: "qseqid",
+            1: "sseqid",
+            2: "pident",
+            3: "length",
+            4: "mismatch",
+            5: "gapopen",
+            6: "qstart",
+            7: "qend",
+            8: "sstart",
+            9: "send",
+            10: "evalue",
+            11: "bitscore",
+        },
+        inplace=True,
+    )
+    df2.rename(
+        columns={
+            0: "qseqid",
+            1: "sseqid",
+            2: "pident",
+            3: "length",
+            4: "mismatch",
+            5: "gapopen",
+            6: "qstart",
+            7: "qend",
+            8: "sstart",
+            9: "send",
+            10: "evalue",
+            11: "bitscore",
+        },
+        inplace=True,
+    )
+
+    vntr_list = [
+        "MLVA_MecA",
+        "VNTR09_01",
+        "VNTR61_01",
+        "VNTR61_02",
+        "VNTR67_01",
+        "MLVA_PVL",
+        "VNTR21_01",
+        "VNTR24_01",
+        "VNTR63_01",
+        "VNTR81_01",
+    ]
+
+    mlva_dict = get_mlva_dict(df)
+
+    profile_list = get_my_profile(df_mapping, vntr_list, mlva_dict)
+
+    mecpvl_list = ["MLVA_MecA", "MLVA_PVL"]
+
+    write_to_file(profile_list, df_mapping, mecpvl_list, mlva_dict, blast_output, output_dir)
+
+if __name__ == "__main__":
+    main()
