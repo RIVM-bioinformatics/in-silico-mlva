@@ -12,4 +12,5 @@ dependencies:
   - pip:
     - termcolor==1.1.0
     - tqdm
+    - rich
 # prefix: /path/to/envs/blastn_mlva

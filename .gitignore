@@ -2,3 +2,4 @@
 example/output/*
 # files to ignore
 example/output*
+bin/logo.py

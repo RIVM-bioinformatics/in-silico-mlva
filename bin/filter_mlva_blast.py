@@ -73,7 +73,7 @@ def determine_outdir(flg_out):
         print(f"Output directory: {outdir}")
     else:
         Path(os.path.abspath(f"{flg_out}/mlva_typing")).mkdir(parents=True, exist_ok=True)
-        outdir = os.path.abspath(flg_out)
+        outdir = os.path.abspath(flg_out) + '/mlva_typing'
         print(f"Output directory: {outdir}")
     return outdir
 
@@ -193,20 +193,20 @@ def mec_or_pvl(df_mappings, mecpvl_list, mlvadict):
         values = mlvadict[mp]
         if len(values) == 0:
             if mp == 'MLVA_MecA':
-                mp_dict_fc[mp] = "MecA MecC Negatief"
+                mp_dict_fc[mp] = "MecA MecC Negative"
             elif mp == 'MLVA_PVL':
-                mp_dict_fc[mp] = "PVL Negatief"
+                mp_dict_fc[mp] = "PVL Negative"
         elif len(set(values)) == 1:
             try:
                 value = df_mappings.loc[(df_mappings['VNTR'] == mp) & (df_mappings['Start'] <= values[0]) & (df_mappings['Stop'] >= values[0])].Value.item()
                 if mp == 'MLVA_MecA':
                     if value == 1:
-                        mp_dict_fc[mp] = "MecA positief"
+                        mp_dict_fc[mp] = "MecA Positive"
                     elif value == 2:
-                        mp_dict_fc[mp] = "MecC positief"
+                        mp_dict_fc[mp] = "MecC Positive"
                 elif mp == 'MLVA_PVL':
                     if value == 1:
-                        mp_dict_fc[mp] = "PVL positief"
+                        mp_dict_fc[mp] = "PVL Positive"
             except:
                 mp_dict_fc[mp] = "Something failed"
     return mp_dict_fc
