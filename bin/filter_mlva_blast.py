@@ -1,8 +1,9 @@
-import argparse, os.path, csv, textwrap
+import argparse, os.path, csv, textwrap, glob
 import pandas as pd
 import numpy as np
 from pathlib import Path
 from termcolor import colored
+from tqdm import tqdm
 
 def getmylogo(pth):
     exec_globals = {}
@@ -33,7 +34,7 @@ def parse_arguments(logo):
         metavar="Name",
         help="CSV file with primer blastn output",
         type=str,
-        required=True,
+        required=False,
     )
 
     arg.add_argument(
@@ -41,6 +42,15 @@ def parse_arguments(logo):
         "--blast_repeat",
         metavar="Name",
         help="CSV file with blastn repeat sequence output",
+        type=str,
+        required=False,
+    )
+
+    arg.add_argument(
+        "-i",
+        "--input",
+        metavar="Name",
+        help="The original fasta input directory",
         type=str,
         required=True,
     )
@@ -58,11 +68,11 @@ def parse_arguments(logo):
 
 def determine_outdir(flg_out):
     if flg_out == None:
-        outdir = os.path.abspath('') + '/output_mlva_typing'
+        outdir = os.path.abspath('') + '/mlva_typing'
         Path(os.path.abspath(f"{outdir}")).mkdir(parents=True, exist_ok=True)
         print(f"Output directory: {outdir}")
     else:
-        Path(os.path.abspath(flg_out)).mkdir(parents=True, exist_ok=True)
+        Path(os.path.abspath(f"{flg_out}/mlva_typing")).mkdir(parents=True, exist_ok=True)
         outdir = os.path.abspath(flg_out)
         print(f"Output directory: {outdir}")
     return outdir
@@ -307,9 +317,9 @@ def double_pad(profile_lst):
     return double_padded_lst_fc
 
 def write_to_file(profile_lst, df_mappings, mecpvl_list, mlvadict, fname, outd):
-    base_input_fc = os.path.basename(fname).replace('_primers-blastn.csv','')
+    base_input_fc = os.path.basename(fname[0]).replace('_primers-blastn.csv','')
     with open(f"{outd}/{base_input_fc}_MLVA.txt", "w") as my_file:
-        my_file.write(str(profile_lst) + '\n')
+        # my_file.write(str(profile_lst) + '\n')
         for p in profile_lst:
             output_mecpvl = mec_or_pvl(df_mappings,mecpvl_list,mlvadict)
             my_file.write(f"MLVA profile: {p}" + '\n')
@@ -329,22 +339,26 @@ def main():
     blastn_header = ['qseqid','sseqid','pident','length','mismatch','gapopen','qstart','qend','sstart','send','evalue','bitscore']
     static_list = ['MLVA_MecA', 'MLVA_PVL']
     vntr_list = ['VNTR09_01', 'VNTR61_01', 'VNTR61_02', 'VNTR67_01', 'VNTR21_01', 'VNTR24_01', 'VNTR63_01', 'VNTR81_01']
-    blast_input = [flags.blast_primer]
-    repeat_file = [flags.blast_repeat]
-    single_entry_list_primers = [entry for file in (csv_to_list(f) for f in blast_input) if file for entry in file]
-    single_entry_list_repeats = [entry for file in (csv_to_list(f) for f in repeat_file) if file for entry in file]
-    df = pd.DataFrame(single_entry_list_primers, columns=blastn_header) # The blast primer output to a df
-    df2 = pd.DataFrame(single_entry_list_repeats, columns=blastn_header) # The blast repeat output to a df
+    list_of_files = glob.glob(os.path.abspath(f"{flags.input}/*"))
+    for file in list_of_files:
+        basename = os.path.splitext(os.path.basename(file))[0]
+        outputname = f"{outdir}/blastn/{basename}"
+        # blast_input = [flags.blast_primer]
+        blast_input = [f"{outputname}_primers-blastn.csv"]
+        # repeat_file = [flags.blast_repeat]
+        repeat_file = [f"{outputname}_repeat-blastn.csv"]
+        single_entry_list_primers = [entry for file in (csv_to_list(f) for f in blast_input) if file for entry in file]
+        single_entry_list_repeats = [entry for file in (csv_to_list(f) for f in repeat_file) if file for entry in file]
+        df = pd.DataFrame(single_entry_list_primers, columns=blastn_header) # The blast primer output to a df
+        df2 = pd.DataFrame(single_entry_list_repeats, columns=blastn_header) # The blast repeat output to a df
 
-    MLVA_dict = get_mlva_dict(df)
-    profiles_in_a_list = get_my_profile(df_mapping, vntr_list, MLVA_dict, df, df2)
+        MLVA_dict = get_mlva_dict(df)
+        profiles_in_a_list = get_my_profile(df_mapping, vntr_list, MLVA_dict, df, df2)
 
-    in_silico_profile = profiles_in_a_list[0]
+        in_silico_profile = profiles_in_a_list[0]
 
-    write_to_file(profiles_in_a_list,df_mapping,static_list,MLVA_dict,flags.blast_primer,outdir)
-    print(in_silico_profile)
+        write_to_file(profiles_in_a_list,df_mapping,static_list,MLVA_dict,blast_input,outdir)
+        print(f"profile for {file}: {in_silico_profile}")
 
 if __name__ == "__main__":
     main()
-
-

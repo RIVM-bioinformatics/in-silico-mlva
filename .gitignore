@@ -1,0 +1,4 @@
+# dirs to ignore:
+example/output/*
+# files to ignore
+example/output*

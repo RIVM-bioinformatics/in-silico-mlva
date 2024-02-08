@@ -1,6 +1,7 @@
 import argparse, os, glob, subprocess, textwrap
 from pathlib import Path
 from termcolor import colored
+from tqdm import tqdm
 
 def getmylogo(pth):
     exec_globals = {}
@@ -48,12 +49,12 @@ def parse_arguments(logo):
 
 def determine_outdir(flg_out):
     if flg_out == None:
-        outdir = os.path.abspath('') + '/output_blastn'
+        outdir = os.path.abspath('') + '/blastn'
         Path(os.path.abspath(f"{outdir}")).mkdir(parents=True, exist_ok=True)
         print(f"Output directory: {outdir}")
     else:
-        Path(os.path.abspath(flg_out)).mkdir(parents=True, exist_ok=True)
-        outdir = os.path.abspath(flg_out)
+        Path(os.path.abspath(f"{flg_out}/blastn")).mkdir(parents=True, exist_ok=True)
+        outdir = os.path.abspath(flg_out) + '/blastn'
         print(f"Output directory: {outdir}")
     return outdir
 
@@ -74,7 +75,7 @@ def main():
     outdir = determine_outdir(flags.output)
 
     list_of_files = glob.glob(os.path.abspath(f"{flags.input}/*"))
-
+    wait_for_jobs = []
     for key in list_of_files:
         basename = os.path.splitext(os.path.basename(key))[0]
         outputname = f"{outdir}/{basename}"
@@ -86,7 +87,7 @@ def main():
             -word_size 7 \
             -perc_identity {flags.perc_identity} \
             -outfmt 10\""
-        subprocess.Popen(subprocess_cmd_primer_blast2input, shell=True, stdout=subprocess.PIPE)
+        sub1 = subprocess.Popen(subprocess_cmd_primer_blast2input, shell=True, stdout=subprocess.PIPE)
         ### blast for VNTR repeat sequences - used for VNTR63_01: 
         subprocess_cmd_repeat_blast2input = f"bsub -q bio -n 1 -R 'rusage[mem=12G]' -R 'span[hosts=1]' -W 15 -M 16000 \
             \"blastn -query {key} \
@@ -95,9 +96,14 @@ def main():
             -word_size 7 \
             -perc_identity {flags.perc_identity} \
             -outfmt 10\""
-        subprocess.Popen(subprocess_cmd_repeat_blast2input, shell=True, stdout=subprocess.PIPE)
-
+        sub2 = subprocess.Popen(subprocess_cmd_repeat_blast2input, shell=True, stdout=subprocess.PIPE)
+        wait_for_jobs.append(sub1)
+        wait_for_jobs.append(sub2)
     print(f"Jobs sent to cluster for {len(list_of_files)} isolates.")
+    print('waiting for blast output...')
+    for s in tqdm(wait_for_jobs):
+        s.communicate()
+
 
 if __name__ == "__main__":
     main()
