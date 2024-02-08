@@ -9,7 +9,7 @@ set -x
 # EXAMPLE USAGE:
 # bash run_pipeline.sh --input example/input_fasta --output example/output
 
-version="In silico MLVA typer v0.1 (February 2024)"
+version="iMLVA v0.1 (February 2024)"
 dataecho=$(date +%y%m%d"_"%H"h"%M"m"%S"s")
 
 DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" > /dev/null 2>&1 && pwd )"
@@ -56,6 +56,10 @@ do
     esac
     shift
 done
+
+bash "${DIR}/bin/bashlogo.sh"
+echo ${version}
+sleep 3
 
 # Determining the input directory
 if [ -n "${INPUT}" ]

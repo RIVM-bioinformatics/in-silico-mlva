@@ -335,17 +335,15 @@ def main():
 
     flags = parse_arguments(getmylogo(logo_path))
     outdir = determine_outdir(flags.output)
-
     blastn_header = ['qseqid','sseqid','pident','length','mismatch','gapopen','qstart','qend','sstart','send','evalue','bitscore']
     static_list = ['MLVA_MecA', 'MLVA_PVL']
     vntr_list = ['VNTR09_01', 'VNTR61_01', 'VNTR61_02', 'VNTR67_01', 'VNTR21_01', 'VNTR24_01', 'VNTR63_01', 'VNTR81_01']
     list_of_files = glob.glob(os.path.abspath(f"{flags.input}/*"))
     for file in list_of_files:
         basename = os.path.splitext(os.path.basename(file))[0]
-        outputname = f"{outdir}/blastn/{basename}"
-        # blast_input = [flags.blast_primer]
+        parent_dir_path_out = os.path.dirname(outdir)
+        outputname = f"{parent_dir_path_out}/blastn/{basename}"
         blast_input = [f"{outputname}_primers-blastn.csv"]
-        # repeat_file = [flags.blast_repeat]
         repeat_file = [f"{outputname}_repeat-blastn.csv"]
         single_entry_list_primers = [entry for file in (csv_to_list(f) for f in blast_input) if file for entry in file]
         single_entry_list_repeats = [entry for file in (csv_to_list(f) for f in repeat_file) if file for entry in file]
