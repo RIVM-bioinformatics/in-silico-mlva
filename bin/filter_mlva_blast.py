@@ -5,6 +5,12 @@ from pathlib import Path
 from termcolor import colored
 from tqdm import tqdm
 
+#notes It still crashes if it cant find the forward VNTR63 primer (local variable 'forward_pos1' referenced before assignment), in get_number_repeats
+
+#notes Check if the sizes found are at locations within range of their repeat sequences. Currently only done for VNTR63_01
+
+#notes if there are overlapping repeat sequences it cant tell the the right order, so it should only do this per contig found, then pick the one with the highest bitscore
+
 def getmylogo(pth):
     exec_globals = {}
     with open(pth, 'r') as lfile:

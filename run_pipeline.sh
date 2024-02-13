@@ -76,6 +76,7 @@ fi
 if [ -n "${OUTPUT}" ]
 then 
     export OUTPUT_DIR=$(realpath ${OUTPUT})
+    mkdir -p ${OUTPUT_DIR}
     OUTPUT_CMD=$(echo "--output ${OUTPUT_DIR}")
 else
     printf "No output directory was given\n"
