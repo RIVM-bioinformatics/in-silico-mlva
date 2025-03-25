@@ -112,8 +112,14 @@ def determine_chain(repeats):
             current_end = int(current_element.split('-')[1])
             next_start = int(next_element.split('-')[0])
             if current_end < next_start: #This is where you keep counting if the end matches the next start.
-                if int(current_element.split('-')[1]) + 1 == int(next_element.split('-')[0]):
+                ce_check = int(current_element.split('-')[1]) + 1 # current end to check, so +1 to equal to next start
+                ns_check = int(next_element.split('-')[0]) # next start to check
+                if ce_check == ns_check:
                     repeat_counter += 1
+                elif abs(ns_check - ce_check) <=2:
+                    repeat_counter += 1
+                    print('VNTR63 repeat sequence not exactly sequential')
+
         return str(repeat_counter)
     else:
         return '99'
@@ -129,11 +135,11 @@ def get_number_repeats(dataframe, dataframe_repeat, fname, rname, bitscori, bits
     if len(shared_list) == 0: # This likely means that 1 of the primers wasn't found! Which is expected for 63_01 reverse
         if fname != 'VNTR63_01_Ff':
             print(f"Only 1 primer found for {fname}, can't continue")
-            exit()
+            return -2
         else:
             if len(forward_list) == 0:
                 print(f"Not even forward primer found for {fname}, can't continue")
-                exit()
+                return -2
             else:
                 forward_pos1, forward_pos2 = [], []
                 for l in forward_list:
@@ -149,6 +155,8 @@ def get_number_repeats(dataframe, dataframe_repeat, fname, rname, bitscori, bits
             forward_pos2_pre = dataframe.loc[(dataframe['qseqid'] == l) & (dataframe['sseqid'] == fname)]['qstart'].tolist()
             forward_pos2.extend(forward_pos2_pre)
     repeat_pos_list = []
+
+
 
     for l in repeat_list:
         repeat_pos = dataframe_repeat.loc[(dataframe_repeat['qseqid'] == l) & (dataframe_repeat['sseqid'] == 'VNTR63_01')].apply(lambda row: f"{row['qstart']}-{row['qend']}", axis=1).tolist()
@@ -179,9 +187,12 @@ def get_possible_sizes(dataframe, fname, rname, bitscori):
                     all_posi_fc.append(0-(int(f)-int(r)))
     return list(set(all_posi_fc))
 
+
+
 def get_mlva_dict(dataframe):
     MLVA_dict_fc = {}
     MLVA_dict_fc['MLVA_MecA'] = get_possible_sizes(dataframe,'MLVA_MecA_Ff','MLVA_MecA_r',30)
+    MLVA_dict_fc['MLVA_MecA_LGA'] = get_possible_sizes(dataframe,'MLVA_MecA_LGA_Ff','MLVA_MecA_LGA_r',30)
     MLVA_dict_fc['VNTR09_01'] = get_possible_sizes(dataframe,'VNTR09_01_Ff','VNTR09_01_r',30)
     MLVA_dict_fc['VNTR61_01'] = get_possible_sizes(dataframe,'VNTR61_01_Nf','VNTR61_01_r',30)
     MLVA_dict_fc['VNTR61_02'] = get_possible_sizes(dataframe,'VNTR61_02_Vf','VNTR61_02_r',30)
@@ -190,13 +201,16 @@ def get_mlva_dict(dataframe):
     MLVA_dict_fc['VNTR21_01'] = get_possible_sizes(dataframe,'VNTR21_01_Vf','VNTR21_01_r',30)
     MLVA_dict_fc['VNTR24_01'] = get_possible_sizes(dataframe,'VNTR24_01_Pf','VNTR24_01_r',30)
     MLVA_dict_fc['VNTR63_01'] = get_possible_sizes(dataframe,'VNTR63_01_Ff','VNTR63_01_r',15)
-    MLVA_dict_fc['VNTR81_01'] = get_possible_sizes(dataframe,'VNTR81_01_Nf','VNTR81_01_r',30)
+    MLVA_dict_fc['VNTR81_01'] = get_possible_sizes(dataframe,'VNTR81_01_Nf','VNTR81_01_r',25)
     return MLVA_dict_fc
 
 def mec_or_pvl(df_mappings, mecpvl_list, mlvadict):
     mp_dict_fc = {}
     for mp in mecpvl_list:
-        values = mlvadict[mp]
+        if mp == 'MLVA_MecA':
+            values = mlvadict[mp] + mlvadict[f"{mp}_LGA"]
+        else:
+            values = mlvadict[mp]
         if len(values) == 0:
             if mp == 'MLVA_MecA':
                 mp_dict_fc[mp] = "MecA MecC Negative"
@@ -277,6 +291,10 @@ def get_my_profile(df_mappings, vntr_lst, mlvadict, df, df2):
     profile_fc_list = double_pad(list(set(profile_fc_list)))
     return profile_fc_list
 
+
+
+
+
 def determine_deviated_profiles(a_profile_list, val, dfmap, fcv):
     times_to_pop = len(a_profile_list)
     for pli in range(0,len(a_profile_list)):
@@ -332,6 +350,9 @@ def write_to_file(profile_lst, df_mappings, mecpvl_list, mlvadict, fname, outd):
             my_file.write(output_mecpvl['MLVA_MecA'] + '\n')
             my_file.write(output_mecpvl['MLVA_PVL'] + '\n')
 
+
+
+
 def main():
     current_file_path = os.path.abspath(__file__)
     parent_dir_path = os.path.dirname(os.path.dirname(current_file_path))
@@ -346,6 +367,7 @@ def main():
     vntr_list = ['VNTR09_01', 'VNTR61_01', 'VNTR61_02', 'VNTR67_01', 'VNTR21_01', 'VNTR24_01', 'VNTR63_01', 'VNTR81_01']
     list_of_files = glob.glob(os.path.abspath(f"{flags.input}/*"))
     for file in list_of_files:
+        
         basename = os.path.splitext(os.path.basename(file))[0]
         parent_dir_path_out = os.path.dirname(outdir)
         outputname = f"{parent_dir_path_out}/blastn/{basename}"
@@ -355,12 +377,10 @@ def main():
         single_entry_list_repeats = [entry for file in (csv_to_list(f) for f in repeat_file) if file for entry in file]
         df = pd.DataFrame(single_entry_list_primers, columns=blastn_header) # The blast primer output to a df
         df2 = pd.DataFrame(single_entry_list_repeats, columns=blastn_header) # The blast repeat output to a df
-
         MLVA_dict = get_mlva_dict(df)
+
         profiles_in_a_list = get_my_profile(df_mapping, vntr_list, MLVA_dict, df, df2)
-
         in_silico_profile = profiles_in_a_list[0]
-
         write_to_file(profiles_in_a_list,df_mapping,static_list,MLVA_dict,blast_input,outdir)
         print(f"profile for {file}: {in_silico_profile}")
 
